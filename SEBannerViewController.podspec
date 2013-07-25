@@ -6,31 +6,28 @@
 #
 Pod::Spec.new do |s|
   s.name         = "SEBannerViewController"
-  s.version      = "0.1.0"
-  s.summary      = "A short description of SEBannerViewController."
-  s.description  = <<-DESC
-                    An optional longer description of SEBannerViewController
+  s.version      = "0.0.1"
+  s.summary      = "A drop-in iAd & AdMob Banner View Controller."
+  # s.description  = <<-DESC
+  #                   An optional longer description of SEBannerViewController
 
-                    * Markdown format.
-                    * Don't worry about the indent, we strip it!
-                   DESC
-  s.homepage     = "http://EXAMPLE/NAME"
-  s.screenshots  = "www.example.com/screenshots_1", "www.example.com/screenshots_2"
-  s.license      = 'MIT'
+  #                   * Markdown format.
+  #                   * Don't worry about the indent, we strip it!
+  #                  DESC
+  s.homepage     = "https://github/segiddins/SEBannerViewController"
+  s.screenshots  = "https://raw.github/segiddins/SEBannerViewController/Screenshots/screenshot~iphone.png", "https://raw.github/segiddins/SEBannerViewController/Screenshots/screenshot~ipad.png"
+  s.license      = 'BSD'
   s.author       = { "Samuel E. Giddins" => "segiddins@segiddins.me" }
-  s.source       = { :git => "http://EXAMPLE/NAME.git", :tag => s.version.to_s }
+  s.source       = { :git => "https://github/segiddins/SEBannerViewController/", :tag => "v#{s.version}" }
 
-  # s.platform     = :ios, '5.0'
-  # s.ios.deployment_target = '5.0'
-  # s.osx.deployment_target = '10.7'
+  s.platform     = :ios, '5.0'
   s.requires_arc = true
 
-  s.source_files = 'Classes'
+  s.source_files = 'Classes/**/*.{h,m}'
   s.resources = 'Assets'
 
   s.ios.exclude_files = 'Classes/osx'
-  s.osx.exclude_files = 'Classes/ios'
-  # s.public_header_files = 'Classes/**/*.h'
-  # s.frameworks = 'SomeFramework', 'AnotherFramework'
-  # s.dependency 'JSONKit', '~> 1.4'
+  s.public_header_files = 'Classes/**/*.h'
+  s.frameworks = 'iAd'
+
 end

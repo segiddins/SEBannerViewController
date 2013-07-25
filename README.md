@@ -20,5 +20,5 @@ Samuel E. Giddins <segiddins@segiddins.me>
 
 ## License
 
-SEBannerViewController is available under the MIT license. See the LICENSE file for more info.
+SEBannerViewController is available under the BSD license. See the LICENSE file for more info.
 
