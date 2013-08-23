@@ -12,7 +12,7 @@
 SEBannerViewController is available with CocoaPods[http://cocoapods.org], to install
 simply add the following line to your Podfile:
 
-    pod SEBannerViewController
+    pod 'SEBannerViewController'
 
 ## Author
 
