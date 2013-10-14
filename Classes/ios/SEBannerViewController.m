@@ -49,6 +49,12 @@ NSString *SEBannerViewActionWillBeginNotification = @"SEBannerViewActionWillBegi
     self.view = contentView;
 }
 
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    [self.view layoutIfNeeded];
+}
+
 - (void)showBanner
 {
     if (!_bannerView) {
@@ -78,7 +84,7 @@ NSString *SEBannerViewActionWillBeginNotification = @"SEBannerViewActionWillBegi
         }
     }
     [self.view addSubview:_bannerView];
-    [self.view setNeedsLayout];
+    [self.view layoutIfNeeded];
 }
 
 - (void)deleteBanner
@@ -87,13 +93,13 @@ NSString *SEBannerViewActionWillBeginNotification = @"SEBannerViewActionWillBegi
         [(id)_bannerView setDelegate : nil];
         [_bannerView removeFromSuperview];
         _bannerView = nil;
+        [self.view layoutIfNeeded];
     }
 }
 
 - (void)hideBanner
 {
     [_bannerView removeFromSuperview];
-    [self.view setNeedsLayout];
     [self.view layoutIfNeeded];
 }
 
@@ -225,14 +231,12 @@ NSString *SEBannerViewActionWillBeginNotification = @"SEBannerViewActionWillBegi
 - (void)failureWithError:(NSError *)error {
     NSLog(@">>> Error loading ad: %@", error);
     [UIView animateWithDuration:0.25 animations: ^{
-        [self.view setNeedsLayout];
         [self.view layoutIfNeeded];
     }];
 }
 
 - (void)didRecieveAd {
     [UIView animateWithDuration:0.25 animations: ^{
-        [self.view setNeedsLayout];
         [self.view layoutIfNeeded];
     }];
 }
