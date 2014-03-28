@@ -2,7 +2,7 @@ Pod::Spec.new do |s|
   s.name         = "SEBannerViewController"
   s.version      = "0.0.1"
   s.summary      = "A drop-in iAd & AdMob Banner View Controller."
-  s.homepage     = "https://github/segiddins/SEBannerViewController"
+  s.homepage     = "https://github.com/segiddins/SEBannerViewController"
   s.screenshots  = "https://raw.github/segiddins/SEBannerViewController/Screenshots/screenshot~iphone.png", "https://raw.github/segiddins/SEBannerViewController/Screenshots/screenshot~ipad.png"
   s.license      = 'BSD'
   s.author       = { "Samuel E. Giddins" => "segiddins@segiddins.me" }
