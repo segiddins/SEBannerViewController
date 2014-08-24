@@ -7,20 +7,53 @@
 //
 
 #import "SEBannerViewController.h"
+
 #ifdef COCOAPODS_POD_AVAILABLE_AdMob
+#define AdMobAvailable
+#define GADBannerViewAvailable
 #import <AdMob/GADBannerView.h>
+#endif
+
+#ifdef COCOAPODS_POD_AVAILABLE_Google_Mobile_Ads_SDK
+#define DFPAvailable
+#define AdMobAvailable
+#define GADBannerViewAvailable
+#import <Google-Mobile-Ads-SDK/DFPBannerView.h>
+@import CoreLocation;
 #endif
 
 NSString *SEBannerViewActionDidFinishNotification = @"SEBannerViewActionDidFinishNotification";
 NSString *SEBannerViewActionWillBeginNotification = @"SEBannerViewActionWillBeginNotification";
 
+NSString *SEStringFromAdNetworkType(SEAdNetworkType adNetworkType)
+{
+    switch (adNetworkType) {
+    case SEAdNetworkiAd:
+        return @"iAd";
+    case SEAdNetworkAdMob:
+        return @"AdMob";
+    case SEAdNetworkGoogleDFP:
+        return @"DFP";
+    }
+}
+
 @interface SEBannerViewController () <ADBannerViewDelegate>
 
-@property (nonatomic, retain) UIView *bannerView;
+@property (nonatomic) UIView *bannerView;
 
-@property (nonatomic, retain) UIViewController *contentController;
+#ifdef DFPAvailable
 
-@property (nonatomic, assign, getter=isGADLoaded) BOOL GADLoaded;
+@property (nonatomic) DFPBannerView *DFPBannerView;
+
+@property (nonatomic) CLLocationManager *locationManager;
+
+#endif
+
+@property (nonatomic) UIViewController *contentController;
+
+@property (nonatomic, getter=isGADLoaded) BOOL GADLoaded;
+
+@property (nonatomic, getter=isAdHidden) BOOL adHidden;
 
 @end
 
@@ -37,87 +70,142 @@ NSString *SEBannerViewActionWillBeginNotification = @"SEBannerViewActionWillBegi
     if (self) {
         _contentController = contentController;
         _adNetwork = adNetwork;
+        _enabled = YES;
+
+#ifdef DFPAvailable
+        _locationManager = [[CLLocationManager alloc] init];
+#endif
     }
     return self;
-}
-
-- (void)loadView {
-    UIView *contentView = [[UIView alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-    [self addChildViewController:_contentController];
-    [contentView addSubview:_contentController.view];
-    [_contentController didMoveToParentViewController:self];
-    self.view = contentView;
 }
 
 - (void)viewDidLoad
 {
     [super viewDidLoad];
+    [self addChildViewController:self.contentController];
+    [self.view addSubview:self.contentController.view];
+    [self.contentController didMoveToParentViewController:self];
     [self.view layoutIfNeeded];
+}
+
+- (void)viewDidDisappear:(BOOL)animated
+{
+    [super viewDidDisappear:animated];
+#ifdef DFPAvailable
+    [self.locationManager stopMonitoringSignificantLocationChanges];
+#endif
+}
+
+- (void)setEnabled:(BOOL)enabled
+{
+    if (_enabled == enabled) {
+        return;
+    }
+
+    _enabled = enabled;
+    if (!enabled) {
+        [self deleteBanner];
+#ifdef DFPAvailable
+        [self.locationManager stopMonitoringSignificantLocationChanges];
+#endif
+    }
 }
 
 - (void)showBanner
 {
-    if (!_bannerView) {
+    self.adHidden = NO;
+    if (!_bannerView && self.isEnabled) {
         switch (self.adNetwork) {
-            case SEAdNetworkiAd: {
-                if ([ADBannerView instancesRespondToSelector:@selector(initWithAdType:)]) {
-                    _bannerView = [[ADBannerView alloc] initWithAdType:ADAdTypeBanner];
-                }
-                else {
-                    _bannerView = [[ADBannerView alloc] init];
-                }
-                [(ADBannerView *)_bannerView setDelegate : self];
-                break;
+        case SEAdNetworkiAd: {
+            if ([ADBannerView instancesRespondToSelector:@selector(initWithAdType:)]) {
+                _bannerView = [[ADBannerView alloc] initWithAdType:ADAdTypeBanner];
+            } else {
+                _bannerView = [[ADBannerView alloc] init];
             }
-           case SEAdNetworkAdMob: {
-#ifdef COCOAPODS_POD_AVAILABLE_AdMob
-               _bannerView = [[GADBannerView alloc] initWithAdSize:kGADAdSizeSmartBannerPortrait];
-               [(GADBannerView *)_bannerView setAdUnitID:self.adMobPublisherID];
-               [(GADBannerView *)_bannerView setRootViewController:self];
-               GADRequest *request = [GADRequest request];
-               request.keywords = self.adKeywords;
-               [(GADBannerView *)_bannerView setDelegate:self];
-               [(GADBannerView *)_bannerView loadRequest:request];
-#endif
-               break;
-           }
+            [(ADBannerView *)_bannerView setDelegate:self];
+            break;
         }
+        case SEAdNetworkAdMob: {
+#ifdef AdMobAvailable
+            _bannerView = [[GADBannerView alloc] initWithAdSize:kGADAdSizeSmartBannerPortrait];
+            [(GADBannerView *)_bannerView setAdUnitID:self.adMobPublisherID];
+            [(GADBannerView *)_bannerView setRootViewController:self];
+            GADRequest *request = [GADRequest request];
+            request.keywords = self.adKeywords;
+            [(GADBannerView *)_bannerView setDelegate:self];
+            [(GADBannerView *)_bannerView loadRequest:request];
+#endif
+            break;
+        }
+        case SEAdNetworkGoogleDFP: {
+#ifdef DFPAvailable
+            [self.locationManager startMonitoringSignificantLocationChanges];
+            self.DFPBannerView = [[DFPBannerView alloc] initWithAdSize:kGADAdSizeSmartBannerPortrait];
+            self.DFPBannerView.adUnitID = self.DFPAdUnitID;
+            self.DFPBannerView.rootViewController = self;
+            self.DFPBannerView.delegate = self;
+            self.DFPBannerView.validAdSizes = @[
+                [NSValue valueWithBytes:&kGADAdSizeSmartBannerPortrait objCType:@encode(GADAdSize)],
+                [NSValue valueWithBytes:&kGADAdSizeSmartBannerPortrait objCType:@encode(GADAdSize)],
+            ];
+            GADRequest *request = [GADRequest request];
+            CLLocation *location = self.locationManager.location;
+            [request setLocationWithLatitude:location.coordinate.latitude
+                                   longitude:location.coordinate.longitude
+                                    accuracy:sqrt(location.horizontalAccuracy * location.verticalAccuracy)];
+            request.testDevices = @[ GAD_SIMULATOR_ID ];
+            self.bannerView = self.DFPBannerView;
+            [self.DFPBannerView loadRequest:request];
+#endif
+            break;
+        }
+        }
+        [self.view addSubview:self.bannerView];
     }
-    [self.view addSubview:_bannerView];
-    [self.view layoutIfNeeded];
+    [self layoutBannerView];
 }
 
 - (void)deleteBanner
 {
     if (_bannerView) {
-        [(id)_bannerView setDelegate : nil];
+        [(id)_bannerView setDelegate:nil];
         [_bannerView removeFromSuperview];
         _bannerView = nil;
-        [self.view layoutIfNeeded];
+        [self layoutBannerView];
     }
 }
 
 - (void)hideBanner
 {
-    [_bannerView removeFromSuperview];
-    [self.view layoutIfNeeded];
+    self.adHidden = YES;
+    [self layoutBannerView];
 }
 
 #if __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_6_0
-- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation {
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
     return [_contentController shouldAutorotateToInterfaceOrientation:interfaceOrientation];
 }
 #endif
 
-- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation
+{
     return [_contentController preferredInterfaceOrientationForPresentation];
 }
 
-- (NSUInteger)supportedInterfaceOrientations {
+- (NSUInteger)supportedInterfaceOrientations
+{
     return [_contentController supportedInterfaceOrientations];
 }
 
-- (void)viewDidLayoutSubviews {
+- (void)viewDidLayoutSubviews
+{
+    [super viewDidLayoutSubviews];
+    [self layoutBannerView];
+}
+
+- (void)layoutBannerView
+{
     CGRect contentFrame = self.view.bounds, bannerFrame = CGRectZero;
 
     if (!_bannerView || self.view != _bannerView.superview) {
@@ -129,45 +217,64 @@ NSString *SEBannerViewActionWillBeginNotification = @"SEBannerViewActionWillBegi
     // This continues to work on iOS 6.0, so we won't need to do anything further to resize the banner.
     if (contentFrame.size.width < contentFrame.size.height) {
         switch (self.adNetwork) {
-            case SEAdNetworkAdMob: {
+        case SEAdNetworkAdMob: {
 #ifdef COCOAPODS_POD_AVAILABLE_AdMob
-                ((GADBannerView *)_bannerView).adSize = kGADAdSizeSmartBannerPortrait;
+            ((GADBannerView *)_bannerView).adSize = kGADAdSizeSmartBannerPortrait;
 #endif
-                break;
-            }
-            case SEAdNetworkiAd: {
-                ((ADBannerView *)_bannerView).currentContentSizeIdentifier = ADBannerContentSizeIdentifierPortrait;
-                break;
-            }
+            break;
         }
-    }
-    else {
-        switch (self.adNetwork) {
-            case SEAdNetworkAdMob: {
-#ifdef COCOAPODS_POD_AVAILABLE_AdMob
-                ((GADBannerView *)_bannerView).adSize = kGADAdSizeSmartBannerLandscape;
+        case SEAdNetworkiAd: {
+            ((ADBannerView *)_bannerView).currentContentSizeIdentifier = ADBannerContentSizeIdentifierPortrait;
+            break;
+        }
+        case SEAdNetworkGoogleDFP: {
+#ifdef DFPAvailable
+            self.DFPBannerView.adSize = kGADAdSizeSmartBannerPortrait;
 #endif
-                break;
-            }
-            case SEAdNetworkiAd: {
-                ((ADBannerView *)_bannerView).currentContentSizeIdentifier = ADBannerContentSizeIdentifierLandscape;
-                break;
-            }
+            break;
+        }
+        }
+    } else {
+        switch (self.adNetwork) {
+        case SEAdNetworkAdMob: {
+#ifdef COCOAPODS_POD_AVAILABLE_AdMob
+            ((GADBannerView *)_bannerView).adSize = kGADAdSizeSmartBannerLandscape;
+#endif
+            break;
+        }
+        case SEAdNetworkiAd: {
+            ((ADBannerView *)_bannerView).currentContentSizeIdentifier = ADBannerContentSizeIdentifierLandscape;
+            break;
+        }
+        case SEAdNetworkGoogleDFP: {
+#ifdef DFPAvailable
+            self.DFPBannerView.adSize = kGADAdSizeSmartBannerLandscape;
+#endif
+            break;
+        }
         }
     }
     bannerFrame = _bannerView.frame;
 #else
-    // If configured to support iOS >= 6.0 only, then we want to avoid currentContentSizeIdentifier as it is deprecated.
-    // Fortunately all we need to do is ask the banner for a size that fits into the layout area we are using.
-    // At this point in this method contentFrame=self.view.bounds, so we'll use that size for the layout.
+// If configured to support iOS >= 6.0 only, then we want to avoid currentContentSizeIdentifier as it is deprecated.
+// Fortunately all we need to do is ask the banner for a size that fits into the layout area we are using.
+// At this point in this method contentFrame=self.view.bounds, so we'll use that size for the layout.
+
+#ifdef DFPAvailable
+    if (contentFrame.size.width < contentFrame.size.height) {
+        self.DFPBannerView.adSize = kGADAdSizeSmartBannerPortrait;
+    } else {
+        self.DFPBannerView.adSize = kGADAdSizeSmartBannerLandscape;
+    }
+#endif
+
     bannerFrame.size = [_bannerView sizeThatFits:contentFrame.size];
 #endif
 
-    if ((self.adNetwork == SEAdNetworkiAd && ((ADBannerView *)_bannerView).bannerLoaded)) {
+    if (!self.isAdHidden && ((self.adNetwork == SEAdNetworkiAd && ((ADBannerView *)_bannerView).bannerLoaded) || self.GADLoaded)) {
         contentFrame.size.height -= bannerFrame.size.height;
         bannerFrame.origin.y = contentFrame.size.height;
-    }
-    else {
+    } else {
         bannerFrame.origin.y = contentFrame.size.height;
     }
 
@@ -177,50 +284,59 @@ NSString *SEBannerViewActionWillBeginNotification = @"SEBannerViewActionWillBegi
 
 #pragma mark - ADBannerView Delegate
 
-- (void)bannerViewDidLoadAd:(ADBannerView *)banner {
+- (void)bannerViewDidLoadAd:(ADBannerView *)banner
+{
     [self didRecieveAd];
 }
 
-- (void)bannerView:(ADBannerView *)banner didFailToReceiveAdWithError:(NSError *)error {
+- (void)bannerView:(ADBannerView *)banner didFailToReceiveAdWithError:(NSError *)error
+{
     [self failureWithError:error];
 }
 
-- (BOOL)bannerViewActionShouldBegin:(ADBannerView *)banner willLeaveApplication:(BOOL)willLeave {
+- (BOOL)bannerViewActionShouldBegin:(ADBannerView *)banner willLeaveApplication:(BOOL)willLeave
+{
     [self adWillShow];
     return YES;
 }
 
-- (void)bannerViewActionDidFinish:(ADBannerView *)banner {
+- (void)bannerViewActionDidFinish:(ADBannerView *)banner
+{
     [self adDidFinish];
 }
 
 #pragma mark - GADBannerView Delegate
 
-#ifdef COCOAPODS_POD_AVAILABLE_AdMob
+#ifdef GADBannerViewAvailable
 
-- (void)adView:(GADBannerView *)view didFailToReceiveAdWithError:(GADRequestError *)error {
+- (void)adView:(GADBannerView *)view didFailToReceiveAdWithError:(GADRequestError *)error
+{
     _GADLoaded = NO;
     [self failureWithError:error];
 }
 
-- (void)adViewDidDismissScreen:(GADBannerView *)adView {
+- (void)adViewDidDismissScreen:(GADBannerView *)adView
+{
     [self adDidFinish];
 }
 
-- (void)adViewDidReceiveAd:(GADBannerView *)view {
+- (void)adViewDidReceiveAd:(GADBannerView *)view
+{
     _GADLoaded = YES;
     [self didRecieveAd];
 }
 
-- (void)adViewWillDismissScreen:(GADBannerView *)adView {
-
+- (void)adViewWillDismissScreen:(GADBannerView *)adView
+{
 }
 
-- (void)adViewWillLeaveApplication:(GADBannerView *)adView {
+- (void)adViewWillLeaveApplication:(GADBannerView *)adView
+{
     [self adDidFinish];
 }
 
-- (void)adViewWillPresentScreen:(GADBannerView *)adView {
+- (void)adViewWillPresentScreen:(GADBannerView *)adView
+{
     [self adWillShow];
 }
 
@@ -228,30 +344,35 @@ NSString *SEBannerViewActionWillBeginNotification = @"SEBannerViewActionWillBegi
 
 #pragma mark - Generic Delegate
 
-- (void)failureWithError:(NSError *)error {
+- (void)failureWithError:(NSError *)error
+{
     NSLog(@">>> Error loading ad: %@", error);
-    [UIView animateWithDuration:0.25 animations: ^{
-        [self.view layoutIfNeeded];
+    [UIView animateWithDuration:0.25 animations:^{
+        [self layoutBannerView];
     }];
 }
 
-- (void)didRecieveAd {
-    [UIView animateWithDuration:0.25 animations: ^{
-        [self.view layoutIfNeeded];
+- (void)didRecieveAd
+{
+    [UIView animateWithDuration:0.25 animations:^{
+        [self layoutBannerView];
     }];
 }
 
-- (void)adDidFinish {
+- (void)adDidFinish
+{
     [[NSNotificationCenter defaultCenter] postNotificationName:SEBannerViewActionDidFinishNotification object:self.bannerView];
 }
 
-- (void)adWillShow {
+- (void)adWillShow
+{
     [[NSNotificationCenter defaultCenter] postNotificationName:SEBannerViewActionWillBeginNotification object:self.bannerView];
     if (self.adWillShowBlock) self.adWillShowBlock(self, self.bannerView);
 }
 
-- (void)dealloc {
-    [(id)_bannerView setDelegate : nil];
+- (void)dealloc
+{
+    [(id)_bannerView setDelegate:nil];
 }
 
 @end
